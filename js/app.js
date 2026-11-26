@@ -160,12 +160,16 @@ function vInicio() {
 
     ${tarjetaEntre(deuda)}
 
-    ${proximos.length ? `<div class="tarjeta" style="margin-top:12px">
+    ${proximos.length || tarjetasPorPagar().length ? `<div class="tarjeta" style="margin-top:12px">
       <span class="etiqueta">Pagos que vienen</span>
       ${proximos.map(({ cr, st }) => `<div class="tarjeta-fila" style="margin-top:12px">
         <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-weight:600">${e(cr.nombre)}</b>
         <span style="font-size:12px" class="${st.diasFaltan <= 3 ? 'vence-pronto' : 'muted'}">${st.vencida ? 'Vencida hace ' + -st.diasFaltan + ' días' : st.diasFaltan === 0 ? 'Vence hoy' : 'En ' + st.diasFaltan + ' días'} · ${C.pesos(cr.cuota)}</span></div>
         <button class="btn btn-chico btn-lleno" data-a="pagarCuota" data-id="${e(cr.id)}">Pagar</button></div>`).join('')}
+      ${tarjetasPorPagar().map(({ c, dias, deuda }) => `<div class="tarjeta-fila" style="margin-top:12px">
+        <div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b style="font-weight:600">${e(c.nombre)}</b>
+        <span style="font-size:12px" class="${dias <= 3 ? 'vence-pronto' : 'muted'}">${dias < 0 ? 'Venció hace ' + -dias + ' días' : dias === 0 ? 'Vence hoy' : 'En ' + dias + ' días'} · debes ${C.pesos(deuda)}</span></div>
+        <button class="btn btn-chico btn-lleno" data-a="pagarTarjeta" data-id="${e(c.id)}">Pagar</button></div>`).join('')}
     </div>` : ''}
 
     ${cats.length ? `<div class="seccion"><h2>En qué se va</h2><button class="link" data-a="presupuestos">Presupuestos</button></div>
@@ -354,7 +358,9 @@ function vCreditos() {
 
 function vMas() {
   const saldos = D().cuentas.filter((c) => !c.archivada).map((c) => ({ c, s: C.saldoCuenta(c, D().movimientos) }));
-  const total = (p) => saldos.filter((x) => x.c.dueno === p).reduce((s, x) => s + x.s, 0);
+  const normales = saldos.filter((x) => !esTarjeta(x.c));
+  const tarjetas = saldos.filter((x) => esTarjeta(x.c));
+  const total = (p) => normales.filter((x) => x.c.dueno === p).reduce((s, x) => s + x.s, 0);
   const tema = ls.get('tema', 'auto');
   const esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -372,7 +378,20 @@ function vMas() {
       <div><span class="eyebrow">${e(N('pipe'))}</span><span class="v num">${C.pesos(total('pipe'))}</span></div>
       <div><span class="eyebrow">${e(N('luu'))}</span><span class="v num">${C.pesos(total('luu'))}</span></div>
     </div>
-    <div class="lista" style="margin-top:8px">${saldos.map(({ c, s }) => `<button class="ajuste" data-a="editarCuenta" data-id="${e(c.id)}"><span class="izq"><b style="font-weight:500">${e(c.nombre)}</b><span>${e(N(c.dueno))}</span></span><span class="der num" style="color:${s < 0 ? 'var(--danger)' : 'var(--text)'}">${C.pesos(s)}</span></button>`).join('')}</div>
+    <div class="lista" style="margin-top:8px">${normales.map(({ c, s }) => `<button class="ajuste" data-a="editarCuenta" data-id="${e(c.id)}"><span class="izq"><b style="font-weight:500">${e(c.nombre)}</b><span>${e(N(c.dueno))}</span></span><span class="der num" style="color:${s < 0 ? 'var(--danger)' : 'var(--text)'}">${C.pesos(s)}</span></button>`).join('')}</div>
+
+    <div class="seccion"><h2>Tarjetas de crédito</h2><button class="link" data-a="nuevaCuenta" data-tipo="tarjeta">+ Agregar</button></div>
+    ${tarjetas.length ? `<div class="lista">${tarjetas.map(({ c, s }) => {
+      const debe = Math.max(0, -s), aFavor = Math.max(0, s);
+      const disp = c.cupo ? Math.max(0, c.cupo - debe) : null;
+      return `<div class="ajuste" style="gap:10px">
+        <button class="izq" data-a="editarCuenta" data-id="${e(c.id)}" style="background:none;border:none;padding:0;text-align:left;flex:1;min-width:0">
+          <b style="font-weight:500">${e(c.nombre)}</b><span>${e(N(c.dueno))}${disp !== null ? ' · disponible ' + C.pesos(disp) : ''}${c.diaPago ? ' · paga el ' + c.diaPago : ''}</span></button>
+        <span style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <span class="num" style="font-size:14px;font-weight:600;${debe ? 'color:var(--warn)' : ''}">${debe ? 'Debes ' + C.pesos(debe) : aFavor ? 'A favor ' + C.pesos(aFavor) : 'Al día ✓'}</span>
+          ${debe ? `<button class="btn btn-chico btn-lleno" data-a="pagarTarjeta" data-id="${e(c.id)}">Pagar</button>` : ''}
+        </span></div>`;
+    }).join('')}</div>` : `<p class="ayuda">Agrega sus tarjetas para registrar compras con crédito. Cada compra cuenta como gasto y pagar la tarjeta solo baja la deuda.</p>`}
 
     <div class="seccion"><h2>Preferencias</h2></div>
     <div class="lista">
@@ -434,10 +453,23 @@ const hojas = {};
 
 // ---- Registrar / editar movimiento ----
 function cuentasDe(p) { return D().cuentas.filter((c) => !c.archivada && (c.dueno === p || c.dueno === 'conjunto')); }
+const esTarjeta = (c) => c && c.tipo === 'tarjeta';
+function deudaTarjeta(c) { return Math.max(0, -C.saldoCuenta(c, D().movimientos)); }
+// Cuenta "normal" (no tarjeta) de alguien, para pagar desde ahí
+function cuentaNormalDe(p) { return D().cuentas.find((c) => !c.archivada && !esTarjeta(c) && c.dueno === p) || D().cuentas.find((c) => !c.archivada && !esTarjeta(c)); }
+function tarjetasPorPagar(maxDias = 7) {
+  const hoyS = C.hoy();
+  return D().cuentas.filter((c) => esTarjeta(c) && !c.archivada && c.diaPago && deudaTarjeta(c) > 0).map((c) => {
+    const mes = C.mesActual();
+    const pagoEsteMes = D().movimientos.some((m) => m.cuentaDestinoId === c.id && m.tipo === 'transferencia' && C.mesDe(m.fecha) === mes);
+    let prox = `${pagoEsteMes ? C.moverMes(mes, 1) : mes}-${String(Math.min(28, c.diaPago)).padStart(2, '0')}`;
+    return { c, dias: C.diasEntre(hoyS, prox), deuda: deudaTarjeta(c), pagoEsteMes };
+  }).filter((x) => !x.pagoEsteMes && x.dias <= maxDias);
+}
 function opcionesCuentas(sel, preferido) {
   const pref = D().cuentas.filter((c) => !c.archivada && c.dueno === preferido);
   const resto = D().cuentas.filter((c) => !c.archivada && c.dueno !== preferido);
-  const op = (c) => `<option value="${e(c.id)}" ${c.id === sel ? 'selected' : ''}>${e(c.nombre)}</option>`;
+  const op = (c) => `<option value="${e(c.id)}" ${c.id === sel ? 'selected' : ''}>${e(c.nombre)}${esTarjeta(c) ? ' · tarjeta' : ''}</option>`;
   return `<option value="">— Ninguna —</option>${pref.map(op).join('')}${resto.length ? `<optgroup label="Otras">${resto.map(op).join('')}</optgroup>` : ''}`;
 }
 function divisionDe(F) {
@@ -463,13 +495,18 @@ hojas.mov = {
     const monto = C.leerPesos(F.monto);
     let resumen = '';
     if (F.tipo === 'transferencia') {
-      resumen = F.cuentaId && F.cuentaDestinoId ? `De ${cuenta(F.cuentaId)?.nombre} a ${cuenta(F.cuentaDestinoId)?.nombre}` : 'Elige las dos cuentas';
+      const dest = cuenta(F.cuentaDestinoId);
+      if (esTarjeta(dest) && F.cuentaId) {
+        const queda = Math.max(0, deudaTarjeta(dest) - (F.id ? 0 : monto));
+        resumen = `Pago de tarjeta: no cuenta como gasto · la deuda queda en ${C.pesos(queda)}`;
+      } else resumen = F.cuentaId && F.cuentaDestinoId ? `De ${cuenta(F.cuentaId)?.nombre} a ${dest?.nombre}` : 'Elige las dos cuentas';
     } else if (monto) {
       const p = C.partes(monto, divisionDe(F));
       const parteOtro = p[otro(F.pagador)];
       if (F.tipo === 'gasto') resumen = parteOtro ? `${N(otro(F.pagador))} le debe ${C.pesos(parteOtro)} a ${N(F.pagador)}` : 'Nadie le debe a nadie';
       else resumen = parteOtro ? `${N(F.pagador)} le debe ${C.pesos(parteOtro)} a ${N(otro(F.pagador))} (su parte)` : 'Es todo para quien lo recibió';
       const esp = espacio(F.espacioId); if (esp && esp.id !== 'casa') resumen += ` · en ${esp.nombre}`;
+      if (F.tipo === 'gasto' && F.categoria === 'Deudas' && D().cuentas.some(esTarjeta)) resumen += ' · ¿Es el pago de una tarjeta? Usa "Mover" para no contarlo doble';
     }
     const pill = (k, v, txt) => `<button type="button" class="pildora ${F[k] === v ? 'on' : ''}" data-set="${k}" data-v="${e(v)}">${e(txt)}</button>`;
     return `<div class="cab">
@@ -729,28 +766,42 @@ async function guardarPago() {
 // ---- Cuentas ----
 hojas.cuenta = {
   html(F) {
-    return `<div class="agarre"></div><div class="cab"><h3>${F.id ? 'Editar cuenta' : 'Nueva cuenta'}</h3><button type="button" class="btn-icono" data-a="cerrar" aria-label="Cerrar">${I.x()}</button></div>
-      <div class="campo"><label for="a-n">Nombre</label><input id="a-n" class="input" value="${e(F.nombre)}" data-f="nombre" placeholder="Ej: Nequi Pipe"></div>
-      <div class="campo"><span class="etiqueta">Es de</span><div class="pildoras">${['pipe', 'luu', 'conjunto'].map((p) => `<button type="button" class="pildora ${F.dueno === p ? 'on' : ''}" data-set="dueno" data-v="${p}">${e(N(p))}</button>`).join('')}</div></div>
-      <div class="campo"><label for="a-s">¿Cuánto hay HOY en esta cuenta?</label><input id="a-s" class="input" inputmode="numeric" value="${e(F.saldoHoy)}" data-f="saldoHoy" data-pesos placeholder="$0">
-      <p class="ayuda">Mira tu app del banco y escribe el saldo. La app hace el resto.</p></div>
+    const tc = F.tipo === 'tarjeta';
+    return `<div class="agarre"></div><div class="cab"><h3>${F.id ? (tc ? 'Editar tarjeta' : 'Editar cuenta') : (tc ? 'Nueva tarjeta' : 'Nueva cuenta')}</h3><button type="button" class="btn-icono" data-a="cerrar" aria-label="Cerrar">${I.x()}</button></div>
+      <div class="campo"><span class="etiqueta">¿Qué es?</span><div class="chips c2">${[['normal', 'Cuenta o efectivo'], ['tarjeta', 'Tarjeta de crédito']].map(([k, t]) => `<button type="button" class="chip ${(F.tipo || 'normal') === k ? 'on' : ''}" data-set="tipo" data-v="${k}">${t}</button>`).join('')}</div>
+        <p class="ayuda">${tc ? 'Una tarjeta es un bolsillo prestado: cada compra aumenta lo que deben y cada pago lo baja.' : 'Nequi, Nu, Daviplata, cuenta de ahorros, efectivo…'}</p></div>
+      <div class="campo"><label for="a-n">Nombre</label><input id="a-n" class="input" value="${e(F.nombre)}" data-f="nombre" placeholder="${tc ? 'Ej: Rappicard Luu' : 'Ej: Nequi Pipe'}"></div>
+      <div class="campo"><span class="etiqueta">Es de</span><div class="pildoras" style="justify-content:flex-start;margin-left:0">${['pipe', 'luu', 'conjunto'].map((p) => `<button type="button" class="pildora ${F.dueno === p ? 'on' : ''}" data-set="dueno" data-v="${p}">${e(N(p))}</button>`).join('')}</div></div>
+      ${tc ? `<div class="campo"><label for="a-s">¿Cuánto deben HOY en esta tarjeta?</label><input id="a-s" class="input" inputmode="numeric" value="${e(F.saldoHoy)}" data-f="saldoHoy" data-pesos placeholder="$0">
+        <p class="ayuda">Míralo en la app del banco como "saldo total" o "deuda total". Si no deben nada, déjalo en 0.</p></div>
+      <div class="chips c2" style="margin-top:4px">
+        <div class="campo"><label for="a-c">Cupo total (opcional)</label><input id="a-c" class="input" inputmode="numeric" value="${e(F.cupo)}" data-f="cupo" data-pesos placeholder="$0"></div>
+        <div class="campo"><label for="a-d">Día límite de pago</label><input id="a-d" class="input" inputmode="numeric" value="${e(F.diaPago)}" data-f="diaPago" placeholder="Ej: 15"></div></div>
+      <p class="ayuda">Con el día límite, la app les avisa en el inicio una semana antes.</p>`
+      : `<div class="campo"><label for="a-s">¿Cuánto hay HOY en esta cuenta?</label><input id="a-s" class="input" inputmode="numeric" value="${e(F.saldoHoy)}" data-f="saldoHoy" data-pesos placeholder="$0">
+      <p class="ayuda">Mira tu app del banco y escribe el saldo. La app hace el resto.</p></div>`}
       <div class="error" role="alert">${e(F.error || '')}</div>
       <div class="pie"><button type="button" class="btn-primario" data-a="guardarCuenta">Guardar</button>
-      ${F.id ? `<button type="button" class="btn btn-peligro" style="width:100%;margin-top:10px" data-a="archivarCuenta">${estado.confirmar === 'archivarCuenta' ? '¿Seguro? Toca otra vez' : 'Ocultar esta cuenta'}</button>` : ''}</div>`;
+      ${F.id ? `<button type="button" class="btn btn-peligro" style="width:100%;margin-top:10px" data-a="archivarCuenta">${estado.confirmar === 'archivarCuenta' ? '¿Seguro? Toca otra vez' : (tc ? 'Ocultar esta tarjeta' : 'Ocultar esta cuenta')}</button>` : ''}</div>`;
   },
 };
 async function guardarCuenta() {
   const F = estado.F;
   if (!F.nombre.trim()) return errorHoja('Ponle un nombre.');
-  const hoyV = C.leerPesos(F.saldoHoy);
+  const tc = F.tipo === 'tarjeta';
+  // En una tarjeta se escribe lo que se DEBE (positivo); por dentro se guarda como saldo negativo
+  const hoyV = tc ? -Math.abs(C.leerPesos(F.saldoHoy)) : C.leerPesos(F.saldoHoy);
+  const extra = tc
+    ? { tipo: 'tarjeta', cupo: C.leerPesos(F.cupo) || 0, diaPago: Math.min(31, Math.max(0, Math.round(Number(F.diaPago) || 0))) }
+    : { tipo: 'normal' };
   if (F.id) {
     const c = cuenta(F.id);
     const efecto = C.saldoCuenta({ ...c, saldoInicial: 0 }, D().movimientos);
-    await store.actualizar('cuentas', F.id, { nombre: F.nombre.trim(), dueno: F.dueno, saldoInicial: hoyV - efecto });
+    await store.actualizar('cuentas', F.id, { nombre: F.nombre.trim(), dueno: F.dueno, saldoInicial: hoyV - efecto, ...extra });
   } else {
-    await store.agregar('cuentas', { nombre: F.nombre.trim(), dueno: F.dueno, saldoInicial: hoyV, orden: D().cuentas.length + 1 });
+    await store.agregar('cuentas', { nombre: F.nombre.trim(), dueno: F.dueno, saldoInicial: hoyV, orden: D().cuentas.length + 1, ...extra });
   }
-  cerrarHoja(); toast('Cuenta guardada');
+  cerrarHoja(); toast(tc ? 'Tarjeta guardada' : 'Cuenta guardada');
 }
 
 // ---- Presupuestos y categorías ----
@@ -955,8 +1006,24 @@ const acciones = {
     abrirHoja('pago', { creditoId: cr.id, monto: C.pesos(cr.cuota).slice(1), pagador: pag, cuentaId: cuentasDe(pag)[0]?.id || '', fecha: C.hoy() });
   },
   guardarPago,
-  nuevaCuenta: () => abrirHoja('cuenta', { nombre: '', dueno: store.yo, saldoHoy: '' }),
-  editarCuenta: (el) => { const c = cuenta(el.dataset.id); const s = C.saldoCuenta(c, D().movimientos); abrirHoja('cuenta', { id: c.id, nombre: c.nombre, dueno: c.dueno, saldoHoy: (s < 0 ? '-' : '') + C.pesos(Math.abs(s)).slice(1) }); },
+  nuevaCuenta: (el) => abrirHoja('cuenta', { tipo: el.dataset.tipo || 'normal', nombre: '', dueno: store.yo, saldoHoy: '', cupo: '', diaPago: '' }),
+  editarCuenta: (el) => {
+    const c = cuenta(el.dataset.id); const s = C.saldoCuenta(c, D().movimientos);
+    const tc = esTarjeta(c);
+    abrirHoja('cuenta', {
+      id: c.id, tipo: tc ? 'tarjeta' : 'normal', nombre: c.nombre, dueno: c.dueno,
+      saldoHoy: tc ? C.pesos(Math.max(0, -s)).slice(1) : (s < 0 ? '-' : '') + C.pesos(Math.abs(s)).slice(1),
+      cupo: c.cupo ? C.pesos(c.cupo).slice(1) : '', diaPago: c.diaPago || '',
+    });
+  },
+  pagarTarjeta: (el) => {
+    const tc = cuenta(el.dataset.id); if (!tc) return;
+    const dueno = tc.dueno === 'conjunto' ? store.yo : tc.dueno;
+    const F = nuevoMovForm({ tipo: 'transferencia' });
+    Object.assign(F, { cuentaId: cuentaNormalDe(dueno)?.id || '', cuentaDestinoId: tc.id, monto: C.pesos(deudaTarjeta(tc)).slice(1), desc: 'Pago ' + tc.nombre });
+    if (F.monto === '0') F.monto = '';
+    abrirHoja('mov', F);
+  },
   guardarCuenta,
   archivarCuenta: async () => {
     if (estado.confirmar !== 'archivarCuenta') { estado.confirmar = 'archivarCuenta'; pintarHoja(); return; }

@@ -244,6 +244,7 @@ export function analizar(libro, ctx) {
     const existe = cuentasApp.find((c) => norm(c.nombre) === norm(nombre));
     return {
       nombre, dueno: existe?.dueno || duenoDe(nombre),
+      tipo: existe?.tipo || (/rappicard|\btc\b|tarjeta|visa|master|amex|cr[eé]dito/i.test(nombre) ? 'tarjeta' : 'normal'),
       saldoInicial: saldos[nombre]?.valor || 0,
       id: existe?.id || 'imp-' + slug(nombre),
       existe: Boolean(existe),
@@ -285,7 +286,7 @@ export function construirOperaciones(res, respuestas, opts = {}) {
     if (c.existe) {
       if (opts.usarSaldos && c.saldoInicial) { lote.push({ col: 'cuentas', obj: { id: c.id, saldoInicial: c.saldoInicial } }); nCuentas++; }
     } else {
-      lote.push({ col: 'cuentas', obj: { id: c.id, nombre: c.nombre, dueno: c.dueno, saldoInicial: opts.usarSaldos ? c.saldoInicial : 0, orden: 50 } });
+      lote.push({ col: 'cuentas', obj: { id: c.id, nombre: c.nombre, dueno: c.dueno, tipo: c.tipo, saldoInicial: opts.usarSaldos ? c.saldoInicial : 0, orden: 50 } });
       nCuentas++;
     }
   }
