@@ -11,7 +11,7 @@ import { ESPACIOS, CUENTAS, ajustesIniciales } from './defaults.js';
 import { uid } from './calc.js';
 
 export const COLECCIONES = ['movimientos', 'cuentas', 'espacios', 'metas', 'creditos'];
-const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const FB = 'https://www.gstatic.com/firebasejs/13.4.0/';
 
 function vacio() {
   return { movimientos: [], cuentas: [], espacios: [], metas: [], creditos: [], ajustes: null };
@@ -150,9 +150,15 @@ class StoreNube extends StoreBase {
   }
   ruta(col) { return `hogares/${CONFIG.hogar}/${col}`; }
 
-  personaDe(correo) {
-    const c = (correo || '').toLowerCase();
-    for (const p of ['pipe', 'luu']) if ((CONFIG.personas[p].correo || '').toLowerCase() === c) return p;
+  async personaDe(correo) {
+    const c = (correo || '').trim().toLowerCase();
+    if (!c) return null;
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(c));
+    const h = [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    for (const p of ['pipe', 'luu']) {
+      const per = CONFIG.personas[p];
+      if (per.correoHash === h || (per.correo || '').toLowerCase() === c) return p;
+    }
     return null;
   }
 
@@ -165,7 +171,7 @@ class StoreNube extends StoreBase {
         const responder = (r) => { if (primera) { primera = false; resolve(r); } else this.avisar(); };
         this.limpiar();
         if (!user) { this.yo = null; this.listo = true; return responder({ necesitaLogin: true }); }
-        const yo = this.personaDe(user.email);
+        const yo = await this.personaDe(user.email);
         if (!yo) {
           this.errorLogin = `El correo ${user.email} no está autorizado en esta app.`;
           await auth.signOut(a);
@@ -236,13 +242,13 @@ class StoreNube extends StoreBase {
   }
   async entrarCorreo(correo, clave) {
     const { auth, a } = await this.cargarSDK();
-    if (!this.personaDe(correo)) throw new Error('Ese correo no está autorizado en esta app.');
+    if (!(await this.personaDe(correo))) throw new Error('Ese correo no está autorizado en esta app.');
     try { await auth.signInWithEmailAndPassword(a, correo.trim(), clave); }
     catch (e) { throw new Error(traducirError(e)); }
   }
   async crearCuentaCorreo(correo, clave) {
     const { auth, a } = await this.cargarSDK();
-    if (!this.personaDe(correo)) throw new Error('Ese correo no está autorizado en esta app.');
+    if (!(await this.personaDe(correo))) throw new Error('Ese correo no está autorizado en esta app.');
     try {
       const cred = await auth.createUserWithEmailAndPassword(a, correo.trim(), clave);
       await auth.sendEmailVerification(cred.user);

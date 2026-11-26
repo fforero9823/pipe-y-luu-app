@@ -49,15 +49,7 @@ firebase: {
 },
 ```
 
-6. En ese mismo archivo, escribe los correos de cada uno **en minúsculas**:
-
-```js
-personas: {
-  pipe: { nombre: 'Pipe', correo: 'tu-correo@gmail.com' },
-  luu: { nombre: 'Luu', correo: 'correo-de-luu@gmail.com' },
-},
-```
-
+6. Los correos de cada uno van en `personas`, pero **no en texto**: como el repositorio es público, se guarda su "huella" SHA-256 (así nadie puede leerlos). *(Ya está hecho para Pipe y Luu.)*
 7. **Commit changes** para guardar.
 
 > 🔐 ¿Es peligroso que la "apiKey" se vea? No. Es como la dirección de la casa: todos la pueden ver. Lo que protege los datos son las reglas del Paso 5.
