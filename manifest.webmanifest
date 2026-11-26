@@ -1,0 +1,17 @@
+{
+  "name": "Pipe & Luu — Finanzas",
+  "short_name": "Pipe & Luu",
+  "description": "Las finanzas de Pipe y Luu, en un solo lugar",
+  "lang": "es-CO",
+  "start_url": "./#/inicio",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EFEDE7",
+  "theme_color": "#EFEDE7",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

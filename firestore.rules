@@ -1,0 +1,28 @@
+rules_version = '2';
+
+// Reglas de seguridad: la "cerradura" de la base de datos.
+// Solo pueden leer y escribir los dos correos de abajo, y solo si el correo está verificado.
+// ⚠️ Cambia los dos correos por los de ustedes (en minúsculas), igual que en js/config.js.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function esDeLaCasa() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'CORREO_DE_PIPE@gmail.com',
+          'CORREO_DE_LUU@gmail.com'
+        ];
+    }
+
+    match /hogares/{hogar}/{documento=**} {
+      allow read, write: if esDeLaCasa();
+    }
+
+    // Todo lo demás: cerrado.
+    match /{cualquierCosa=**} {
+      allow read, write: if false;
+    }
+  }
+}
